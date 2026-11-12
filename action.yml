@@ -1,0 +1,90 @@
+name: Deploy to Kubernetix
+description: Build this repository with Docker, push the image and deploy it to Kubernetix, then output the live URL.
+author: Kubernetix
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  token:
+    description: A Kubernetix deploy token (kx_...). Keep it in a secret, for example secrets.KX_TOKEN in a production environment.
+    required: true
+  app:
+    description: The app to deploy. By default, the app in .kx.json, or the app an app token is limited to.
+    required: false
+    default: ""
+  path:
+    description: The folder to build, relative to the repository root.
+    required: false
+    default: "."
+  dockerfile:
+    description: The Dockerfile to build with, relative to the repository root (a name inside path also works). By default, the Dockerfile in path.
+    required: false
+    default: ""
+  image:
+    description: Deploy this image instead of building one, for example registry.kubernetix.ai/acme-corp/shop-api@sha256:... Don't combine it with path or dockerfile.
+    required: false
+    default: ""
+  environment:
+    description: The name in the commit status ("Kubernetix / production"). Use the name of the job's environment.
+    required: false
+    default: production
+  wait:
+    description: Wait until the deploy is live (true), or stop once it has started (false).
+    required: false
+    default: "true"
+  timeout:
+    description: How long to wait for the deploy to go live, for example 15m.
+    required: false
+    default: 15m
+  github-token:
+    description: The token kx uses to set the commit status. It needs statuses write permission.
+    required: false
+    default: ${{ github.token }}
+  kx-version:
+    description: The kx version to run. Each release of this Action pins one and carries its checksums; only versions with checksums in this release can be used.
+    required: false
+    default: "1.0.0" # pinned kx version: written by scripts/publish-action.sh
+
+outputs:
+  url:
+    description: The app's live URL.
+    value: ${{ steps.deploy.outputs.url }}
+  deployment-id:
+    description: The ID of the Kubernetix deployment.
+    value: ${{ steps.deploy.outputs.deployment-id }}
+  version:
+    description: The app version this deploy created, for example v15.
+    value: ${{ steps.deploy.outputs.version }}
+  image:
+    description: The image that was deployed, by digest.
+    value: ${{ steps.deploy.outputs.image }}
+
+# Inputs reach the scripts only through env. Never put an input expression
+# inside run: (tests/injection.test.sh fails if one appears).
+runs:
+  using: composite
+  steps:
+    - name: Install kx
+      id: install
+      shell: bash
+      env:
+        KX_VERSION: ${{ inputs.kx-version }}
+        KX_INSTALL_BASE_URL: ""
+      run: bash "$GITHUB_ACTION_PATH/scripts/install-kx.sh"
+
+    - name: Deploy
+      id: deploy
+      shell: bash
+      env:
+        KX_BIN: ${{ steps.install.outputs.kx-path }}
+        KX_TOKEN: ${{ inputs.token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        DEPLOY_APP: ${{ inputs.app }}
+        DEPLOY_PATH: ${{ inputs.path }}
+        DEPLOY_DOCKERFILE: ${{ inputs.dockerfile }}
+        DEPLOY_IMAGE: ${{ inputs.image }}
+        DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+        DEPLOY_WAIT: ${{ inputs.wait }}
+        DEPLOY_TIMEOUT: ${{ inputs.timeout }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/deploy.sh"
