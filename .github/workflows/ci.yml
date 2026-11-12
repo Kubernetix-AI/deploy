@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: actionlint and shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.4"
+          cache: false
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: v1.7.12
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+      - name: actionlint
+        run: actionlint
+      - name: shellcheck
+        run: shellcheck -x scripts/*.sh tests/*.sh
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check test tools
+        run: |
+          command -v jq
+          python3 -c 'import yaml' || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+      - name: install-kx.sh against fake releases
+        run: tests/install-kx.test.sh
+      - name: Inputs can't run commands
+        run: tests/injection.test.sh
+      - name: publish-action.sh
+        run: tests/publish-action.test.sh
+
+  pinned:
+    name: Install every pinned kx (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # x64 and ARM64, so both lines of every checksums file are exercised.
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download and verify each kx version in checksums/
+        run: |
+          set -euo pipefail
+          found=false
+          for f in checksums/*.txt; do
+            [ -f "$f" ] || continue
+            found=true
+            v="${f##*/}"
+            v="${v%.txt}"
+            echo "::group::kx $v"
+            KX_VERSION="$v" GITHUB_PATH="$(mktemp)" GITHUB_OUTPUT="$(mktemp)" bash scripts/install-kx.sh
+            echo "::endgroup::"
+          done
+          if [ "$found" = false ]; then
+            echo "No kx versions are pinned yet; scripts/publish-action.sh adds them."
+          fi
+
+  # The one check that branch protection requires: it passes only when every
+  # job above passed.
+  ci:
+    name: CI
+    if: always()
+    needs: [lint, test, pinned]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            if [ "$r" != success ]; then
+              echo "::error::Not every CI job passed: $RESULTS"
+              exit 1
+            fi
+          done
