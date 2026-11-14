@@ -38,6 +38,11 @@ jobs:
 The dashboard's Deploy tab shows this workflow with your app and branch filled in, ready to
 copy.
 
+A new app gets the port in your Dockerfile's first `EXPOSE` line (8080 without one), and a
+version is live once your app answers HTTP requests on `/` at that port. If a new version's
+container keeps crashing or doesn't answer, the job fails after a few minutes with the
+container's last log lines, and the version before it keeps serving.
+
 The `concurrency` group serializes deploys of one app: a running deploy is never canceled, and
 if several pushes arrive while it runs, only the newest one deploys next. Run one deploy per
 app at a time; a deploy started elsewhere (from a laptop or the dashboard) at the same moment
@@ -190,8 +195,10 @@ errors it adds what to change in the workflow.
 | This token can't upload images. | Create a token with Push images on the app's Deploy tab, or deploy an image that's already pushed with the `image` input. |
 | There's no Dockerfile in /home/runner/work/shop-api/shop-api. | Set `path` to the folder with your Dockerfile, or set `dockerfile`. |
 | acme-corp has used all 5 deploys the Free plan includes today; more are available at 00:00 UTC (in 3 h 12 min). | Wait, or upgrade for more deploys a day: platform.kubernetix.ai/plans |
-| This token has uploaded images too often in the last hour. | Wait the minutes it says, then re-run the job. |
-| shop-api v15 didn't go live: your container is crashing on start. Version 14 is still serving. | The 20 log lines after it usually say why. See more with `kx logs --deployment v15`. |
+| This token has uploaded images too often in the last hour. | kx waits up to about 6 minutes for this on its own. If it needs longer, wait the minutes it says, then re-run the job. |
+| The token in the KX_TOKEN secret doesn't have the Read permission, which kx deploy needs. | Create a deploy token on the app's Deploy tab (it has Deploy, Read and Push images) and replace the `KX_TOKEN` secret. |
+| shop-api v15 didn't go live: for 2 minutes its container kept crashing or wasn't answering health checks on / at port 8080. Version 14 is still serving. | The log lines above it usually say why. Make the app start and answer on `/` at the port in your Dockerfile's `EXPOSE` line. |
+| shop-api v15 didn't go live: your container is crashing on start. Version 14 is still serving. | The 20 log lines above it usually say why. See more with `kx logs --deployment v15`. |
 | shop-api v15 is still starting after 15 minutes, so kx stopped waiting; the deploy continues. | Check on it with `kx status`, or raise `timeout`. |
 | Kubernetix-AI/deploy runs on Linux runners only, and this job runs on macOS. | Use runs-on: ubuntu-latest for the job that deploys. |
 | This release of Kubernetix-AI/deploy can't install kx 1.2.0, because it has no checksums for it. | Use a kx version it has checksums for (1.0.0), or a newer release of the Action. |
