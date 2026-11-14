@@ -84,7 +84,7 @@ dashboard.
 | `image` | Deploy this image instead of building, for example `registry.kubernetix.ai/acme-corp/shop-api@sha256:...`. Don't combine it with `path` or `dockerfile`. | |
 | `environment` | The name in the commit status, `Kubernetix / <environment>`. Use the job's environment name. | `production` |
 | `wait` | `true` waits until the deploy is live; `false` stops once it has started. | `true` |
-| `timeout` | How long to wait for the deploy to go live. | `15m` |
+| `timeout` | How long to wait for the deploy to go live. The default outlasts Kubernetix's own retries of a version that doesn't get ready (3 attempts of 5 minutes). | `18m` |
 | `github-token` | The token used to set the commit status. It needs `statuses: write`. | `${{ github.token }}` |
 | `kx-version` | The kx version to run. Each release of this Action pins one and carries its checksums; only those versions can be used. | `1.0.0` <!-- pinned-kx-version --> |
 
@@ -201,7 +201,7 @@ errors it adds what to change in the workflow.
 | The token in the KX_TOKEN secret doesn't have the Read permission, which kx deploy needs. | Create a deploy token on the app's Deploy tab (it has Deploy, Read and Push images) and replace the `KX_TOKEN` secret. |
 | shop-api v15 didn't go live: its container kept crashing or didn't answer health checks on / at port 8080. Version 14 is still serving. | The log lines in the run usually say why (kx shows them with an earlier warning). Make the app start and answer on `/` at the port in your Dockerfile's `EXPOSE` line. |
 | shop-api v15 didn't go live: your container is crashing on start. Version 14 is still serving. | The 20 log lines above it usually say why. See more with `kx logs --deployment v15`. |
-| shop-api v15 is still starting after 15 minutes, so kx stopped waiting; the deploy continues. | Check on it with `kx status`, or raise `timeout`. |
+| shop-api v15 is still starting after 18 minutes, so kx stopped waiting; the deploy continues. | Check on it with `kx status`, or raise `timeout`. |
 | Kubernetix-AI/deploy runs on Linux runners only, and this job runs on macOS. | Use runs-on: ubuntu-latest for the job that deploys. |
 | This release of Kubernetix-AI/deploy can't install kx 1.2.0, because it has no checksums for it. | Use a kx version it has checksums for (1.0.0), or a newer release of the Action. |
 | kx 1.0.0 is no longer available from GitHub, so this release of Kubernetix-AI/deploy can't install it. | Use a newer release of the Action, such as Kubernetix-AI/deploy@v1, or remove kx-version. |

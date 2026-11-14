@@ -106,18 +106,18 @@ echo "# image mode"
 inputs="$(json --arg img "$P_IMAGE" --arg env "$P_SEMI" '{image: $img, environment: $env, token: "kx_test"}')"
 run_deploy "$inputs"
 expect_args "image mode passes --image and no --build for the default path" \
-  deploy --github "--image=$P_IMAGE" "--environment=$P_SEMI" "--timeout=15m"
+  deploy --github "--image=$P_IMAGE" "--environment=$P_SEMI" "--timeout=18m"
 expect_nothing_ran "no input was executed (image mode)"
 
 inputs="$(json --arg img "$P_IMAGE" '{image: $img, path: "services/api", token: "kx_test"}')"
 run_deploy "$inputs"
 expect_args "image mode with a path passes both, for kx to explain" \
-  deploy --github "--image=$P_IMAGE" "--build=services/api" "--environment=production" "--timeout=15m"
+  deploy --github "--image=$P_IMAGE" "--build=services/api" "--environment=production" "--timeout=18m"
 
 echo "# defaults and simple inputs"
 run_deploy '{"token": "kx_test"}'
-expect_args "defaults: build the repository root for production, 15 minute timeout" \
-  deploy --github "--build=." "--environment=production" "--timeout=15m"
+expect_args "defaults: build the repository root for production, 18 minute timeout" \
+  deploy --github "--build=." "--environment=production" "--timeout=18m"
 
 run_deploy '{"token": "kx_test", "app": "shop-api", "wait": "false", "timeout": "30m"}'
 expect_args "wait: false adds --no-wait" \
@@ -143,7 +143,7 @@ fi
 for event in pull_request pull_request_target pull_request_review pull_request_review_comment merge_group; do
   run_deploy '{"token": ""}' GITHUB_EVENT_NAME=$event
   expect_args "an empty token on $event still runs kx, which skips pull request runs" \
-    deploy --github "--build=." "--environment=production" "--timeout=15m"
+    deploy --github "--build=." "--environment=production" "--timeout=18m"
 done
 
 # Every other event deploys, so an empty token there is a mistake to stop on.

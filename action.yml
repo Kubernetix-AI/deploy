@@ -34,9 +34,9 @@ inputs:
     required: false
     default: "true"
   timeout:
-    description: How long to wait for the deploy to go live, for example 15m.
+    description: How long to wait for the deploy to go live, for example 30m. The default outlasts Kubernetix's own retries of a version that doesn't get ready (3 attempts of 5 minutes).
     required: false
-    default: 15m
+    default: 18m
   github-token:
     description: The token kx uses to set the commit status. It needs statuses write permission.
     required: false
