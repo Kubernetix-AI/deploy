@@ -139,9 +139,22 @@ else
   fail_test "an empty token on push stops with the two-line fix" "rc=$RC output: $OUT"
 fi
 
-run_deploy '{"token": ""}' GITHUB_EVENT_NAME=pull_request
-expect_args "an empty token on pull_request still runs kx, which explains it only deploys on push" \
-  deploy --github "--build=." "--environment=production" "--timeout=15m"
+# Pull request runs get no secrets from forks, and kx skips them with exit 0.
+for event in pull_request pull_request_target pull_request_review pull_request_review_comment merge_group; do
+  run_deploy '{"token": ""}' GITHUB_EVENT_NAME=$event
+  expect_args "an empty token on $event still runs kx, which skips pull request runs" \
+    deploy --github "--build=." "--environment=production" "--timeout=15m"
+done
+
+# Every other event deploys, so an empty token there is a mistake to stop on.
+for event in workflow_dispatch release schedule workflow_run repository_dispatch; do
+  run_deploy '{"token": ""}' GITHUB_EVENT_NAME=$event
+  if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The token input is empty"; then
+    pass "an empty token on $event stops with the two-line fix"
+  else
+    fail_test "an empty token on $event stops with the two-line fix" "rc=$RC output: $OUT"
+  fi
+done
 
 run_deploy "$(json --arg t $'kx_secretpart\n::warning::injected' '{token: $t}')"
 if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "more than one line" && ! contains "$OUT" "secretpart"; then

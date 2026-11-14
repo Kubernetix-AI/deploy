@@ -48,11 +48,13 @@ if [ -n "$token" ]; then
   echo "::add-mask::$token"
 else
   case "${GITHUB_EVENT_NAME:-}" in
-    push | workflow_dispatch)
+    # Pull request runs never deploy (and get no secrets from forks): kx
+    # says so and exits 0. Without an event name kx explains the refusal.
+    pull_request | pull_request_target | pull_request_review | pull_request_review_comment | merge_group | "") ;;
+    *)
       fail "The token input is empty, so this workflow can't deploy." \
         "Save a deploy token as the KX_TOKEN secret of the production environment, and give the job environment: production."
       ;;
-    *) ;; # kx explains that it only deploys on push and exits 0.
   esac
 fi
 

@@ -123,11 +123,15 @@ A "Run workflow" button for manual deploys: add `workflow_dispatch:` under `on:`
 
 ## Which events deploy
 
-- `push` (and `workflow_dispatch`, if you add it) runs the whole deploy. Re-running a job
-  deploys that commit again.
-- Any other event, including `pull_request`, prints "Pull request previews aren't available
-  yet; this workflow only deploys on push." and succeeds without deploying, so unmerged code
-  never reaches production.
+- Pull request runs never deploy: `pull_request`, `pull_request_target`,
+  `pull_request_review`, `pull_request_review_comment` and `merge_group` print "Pull request
+  previews aren't available yet, so kx skips pull and merge request runs." and succeed without
+  deploying, so unmerged code never reaches production (and a workflow that also runs on pull
+  requests stays green).
+- Every other event runs the whole deploy of the commit the workflow checked out: `push`,
+  `workflow_dispatch`, and also `release`, `schedule`, `workflow_run` or any other event you add
+  under `on:`. List only the events you want to deploy from. Re-running a job deploys that
+  commit again.
 
 ## What GitHub shows
 
@@ -211,7 +215,8 @@ errors it adds what to change in the workflow.
   environment secret limited to your deploy branch.
 - **Least privilege.** The workflow needs only `contents: read` and `statuses: write`. The
   registry credential kx uses to push is minted for the run, masked, and expires within an hour.
-- **Pull requests never deploy**, so code that isn't merged can't reach production.
+- **Pull requests never deploy**, so code that isn't merged can't reach production. Other
+  events deploy, so list only the ones you deploy from.
 - **Only GitHub and Kubernetix** are contacted: GitHub for the kx download and the commit
   status, `https://platform.kubernetix.ai` and `registry.kubernetix.ai` for the deploy.
 

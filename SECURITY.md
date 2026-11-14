@@ -46,8 +46,10 @@ scanners without a demonstrated impact.
   registry credential it mints, and sends the token only to the Kubernetix API over HTTPS.
 - **Permissions.** The Action needs `contents: read` and `statuses: write`, and uses the job's
   own `GITHUB_TOKEN` only to set the commit status.
-- **Pull requests never deploy.** kx refuses to deploy from any event other than `push` and
-  `workflow_dispatch`.
+- **Pull requests never deploy.** kx skips pull request runs (`pull_request`,
+  `pull_request_target`, the pull request review events and `merge_group`) without deploying,
+  so code that isn't merged can't reach production. Other events deploy the commit the
+  workflow checked out, so list only the events you deploy from under `on:`.
 - **Tags.** Release tags are created only by maintainers with two-factor authentication. Pin
   the Action to a full commit SHA if you want to review every change before you run it (see the
   README).
