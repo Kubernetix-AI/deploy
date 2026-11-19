@@ -233,4 +233,4 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## License
 
-To be decided.
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Nandan, Inc.
