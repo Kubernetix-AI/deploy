@@ -12,6 +12,7 @@
 #   DEPLOY_DOCKERFILE   dockerfile
 #   DEPLOY_IMAGE        image
 #   DEPLOY_REPOSITORY   repository
+#   DEPLOY_REBUILD      rebuild
 #   DEPLOY_ENVIRONMENT  environment
 #   DEPLOY_WAIT         wait
 #   DEPLOY_TIMEOUT      timeout
@@ -84,16 +85,33 @@ if [ -n "${DEPLOY_DOCKERFILE:-}" ]; then
   args+=("--dockerfile=$DEPLOY_DOCKERFILE")
 fi
 
-if [ -n "${DEPLOY_REPOSITORY:-}" ]; then
-  # kx 1.0 has no --repository; say so instead of kx's unknown-flag error.
-  help="$("$KX_BIN" deploy --help 2>/dev/null || true)"
-  case "$help" in
-    *--repository*) ;;
-    *) fail "The repository input needs kx 1.1.0 or later, and this job runs an older kx." \
-      "Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the repository input." ;;
+# needs_flag FLAG INPUT: stop unless this kx has FLAG. kx 1.0 has neither
+# --repository nor --rebuild; say so instead of kx's unknown-flag error.
+kx_help=""
+needs_flag() {
+  if [ -z "$kx_help" ]; then
+    kx_help="$("$KX_BIN" deploy --help 2>/dev/null || true)"
+  fi
+  case "$kx_help" in
+    *"$1"*) ;;
+    *) fail "The $2 input needs kx 1.1.0 or later, and this job runs an older kx." \
+      "Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the $2 input." ;;
   esac
+}
+
+if [ -n "${DEPLOY_REPOSITORY:-}" ]; then
+  needs_flag --repository repository
   args+=("--repository=$DEPLOY_REPOSITORY")
 fi
+
+case "${DEPLOY_REBUILD:-false}" in
+  false | False | FALSE) ;;
+  true | True | TRUE)
+    needs_flag --rebuild rebuild
+    args+=(--rebuild)
+    ;;
+  *) fail "The rebuild input must be true or false." "Set rebuild: true to build the image even if kx built this commit before, or leave it out." ;;
+esac
 
 args+=("--environment=${DEPLOY_ENVIRONMENT:-production}")
 

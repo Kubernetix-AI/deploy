@@ -20,7 +20,8 @@ cat >"$STUB" <<'EOF'
 # the tags of the commit it would build. "deploy --help" prints STUB_HELP
 # (by default a line with the --repository flag, as kx 1.1 has).
 if [ "${1-}" = deploy ] && [ "${2-}" = --help ]; then
-  printf '%s\n' "${STUB_HELP-      --repository repository   the registry repository to push to}"
+  printf '%s\n' "${STUB_HELP-      --repository repository   the registry repository to push to
+      --rebuild                 build the image even if kx built this commit the same way before}"
   exit 0
 fi
 printf '%s\0' "$@" >"$STUB_ARGS"
@@ -129,6 +130,30 @@ if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The repository
   pass "with a kx that has no --repository, the repository input stops with the two-line fix before deploying"
 else
   fail_test "with a kx that has no --repository, the repository input stops with the two-line fix before deploying" "rc=$RC output: $OUT"
+fi
+
+echo "# the rebuild input"
+run_deploy '{"token": "kx_test", "rebuild": "true"}'
+expect_args "rebuild: true adds --rebuild" \
+  deploy --github "--build=." "--rebuild" "--environment=production" "--timeout=18m"
+
+run_deploy '{"token": "kx_test", "rebuild": "false", "repository": "shop-frontend"}'
+expect_args "rebuild: false adds nothing" \
+  deploy --github "--build=." "--repository=shop-frontend" "--environment=production" "--timeout=18m"
+
+run_deploy "$(json --arg r "true\$(touch pwned-rebuild)" '{token: "kx_test", rebuild: $r}')"
+if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The rebuild input must be true or false."; then
+  pass "a rebuild value other than true or false is refused before kx runs"
+else
+  fail_test "a rebuild value other than true or false is refused before kx runs" "rc=$RC output: $OUT"
+fi
+expect_nothing_ran "no input was executed (rebuild)"
+
+run_deploy '{"token": "kx_test", "rebuild": "true"}' STUB_HELP="      --repository repository   the registry repository to push to"
+if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The rebuild input needs kx 1.1.0 or later"; then
+  pass "with a kx that has no --rebuild, rebuild: true stops with the two-line fix before deploying"
+else
+  fail_test "with a kx that has no --rebuild, rebuild: true stops with the two-line fix before deploying" "rc=$RC output: $OUT"
 fi
 
 echo "# image mode"

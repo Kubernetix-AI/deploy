@@ -29,6 +29,10 @@ inputs:
     description: The repository in your organization's registry to push the image to, registry.kubernetix.ai/<org>/<repository>, for example shop-frontend. By default, the repository in .kx.json, or the app's name. Needs kx 1.1.0 or later.
     required: false
     default: ""
+  rebuild:
+    description: Build the image even if kx built this commit the same way before (true), or deploy that earlier build again (false). Needs kx 1.1.0 or later.
+    required: false
+    default: "false"
   environment:
     description: The name in the commit status ("Kubernetix / production"). Use the name of the job's environment.
     required: false
@@ -89,6 +93,7 @@ runs:
         DEPLOY_DOCKERFILE: ${{ inputs.dockerfile }}
         DEPLOY_IMAGE: ${{ inputs.image }}
         DEPLOY_REPOSITORY: ${{ inputs.repository }}
+        DEPLOY_REBUILD: ${{ inputs.rebuild }}
         DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
         DEPLOY_WAIT: ${{ inputs.wait }}
         DEPLOY_TIMEOUT: ${{ inputs.timeout }}
