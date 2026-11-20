@@ -50,6 +50,8 @@ jobs:
         run: tests/install-kx.test.sh
       - name: Inputs can't run commands
         run: tests/injection.test.sh
+      - name: version-tags.sh against local repositories
+        run: tests/version-tags.test.sh
       - name: publish-action.sh
         run: tests/publish-action.test.sh
 
