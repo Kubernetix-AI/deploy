@@ -82,6 +82,7 @@ dashboard.
 | `path` | The folder to build, relative to the repository root. | `.` |
 | `dockerfile` | The Dockerfile to build with, relative to the repository root (a name inside `path`, such as `Dockerfile.prod`, works too). | `Dockerfile` in `path` |
 | `image` | Deploy this image instead of building, for example `registry.kubernetix.ai/acme-corp/shop-api@sha256:...`. Don't combine it with `path` or `dockerfile`. | |
+| `repository` | The repository in your organization's registry to push to, `registry.kubernetix.ai/<org>/<repository>`, for example `shop-frontend` ([more](#image-tags-and-repository)). Needs kx 1.1.0 or later. | the repository in `.kx.json`, or the app's name |
 | `environment` | The name in the commit status, `Kubernetix / <environment>`. Use the job's environment name. | `production` |
 | `wait` | `true` waits until the deploy is live; `false` stops once it has started. | `true` |
 | `timeout` | How long to wait for the deploy to go live. The default outlasts Kubernetix's own retries of a version that doesn't get ready (3 attempts of 5 minutes). | `18m` |
@@ -126,7 +127,60 @@ An image built by an earlier step or another workflow:
           token: "${{ secrets.KX_TOKEN }}"
 ```
 
+Images that live in a repository not named after the app:
+
+```yaml
+        with:
+          app: shop-api
+          repository: shop-frontend
+          token: "${{ secrets.KX_TOKEN }}"
+```
+
 A "Run workflow" button for manual deploys: add `workflow_dispatch:` under `on:`.
+
+## Image tags and repository
+
+kx pushes the image under the commit's first 12 characters, such as `3f9c2a1b7d4e`. With kx
+1.1.0 or later, when the commit has a git tag that looks like a version (`v1.4.0` or `1.4.0`,
+optionally with a pre-release such as `-rc.1`; the highest if there are several), it pushes the
+image under that version too, without the `v`: `1.4.0`. The run log's Pushed line and the job
+summary show it. kx never moves a version tag to another image: if `1.4.0` already holds a
+different build, the job fails and deploys nothing. It always deploys the image by its digest.
+
+`actions/checkout` fetches one commit and no tags by default, so before kx builds, the Action
+asks `origin` for the tags that point at the commit and fetches the version tags among them.
+That uses the checkout's credentials, which `actions/checkout` keeps unless you set
+`persist-credentials: false`; if it can't, the run log says so and the image gets no version
+tag. Either of these also works:
+
+- deploy when a version tag is pushed (the checkout then has the tag):
+
+  ```yaml
+  on:
+    push: { tags: ["v*"] }
+  ```
+
+- or fetch the tags in the checkout yourself:
+
+  ```yaml
+        - uses: actions/checkout@v4
+          with: { fetch-depth: 0 }   # or: fetch-tags: true
+  ```
+
+A re-run of a tag's workflow builds the image again, and a new build rarely has the same digest,
+so it stops at the existing version tag. Deploy what the tag holds with the `image` input
+instead, using the digest the error names: `image: registry.kubernetix.ai/acme-corp/shop-api@sha256:...`.
+For the same reason, start one deploy per commit: a workflow that runs on both branch and tag
+pushes starts two runs when you push a tagged commit to the branch, and the second one fails at
+the version tag without deploying. Deploy on tag pushes or on branch pushes, not both.
+
+The image goes to `registry.kubernetix.ai/<org>/<app>` unless the `repository` input, or
+`"repository"` in a committed `.kx.json` (for the app it links), names another repository in
+your organization's registry, such as the one your images have always been in. The name is
+lowercase letters and digits with single `.`, `_` or `-` between them and `/` between parts,
+without the registry's address or the organization. A deploy token's Push images permission
+covers every repository in the organization's registry, so the app's own deploy token can push
+there.
 
 ## Which events deploy
 
@@ -148,7 +202,8 @@ All of these use the job's own `GITHUB_TOKEN`; the Action needs no GitHub App or
   3m 14s" linking to the app, or the first line of the error.
 - **Deployment**: the job's `environment:` line makes GitHub record a production deployment
   with a "View deployment" link to the URL kx outputs.
-- **Job summary**: app, version, URL, image digest, commit, duration and the rollback command.
+- **Job summary**: app, version, URL, image digest, the image's tags (kx 1.1.0 or later),
+  commit, duration and the rollback command.
 - **Annotations and outputs**: an error annotation with both lines of any error, and the outputs
   above.
 
@@ -207,6 +262,10 @@ errors it adds what to change in the workflow.
 | kx 1.0.0 is no longer available from GitHub, so this release of Kubernetix-AI/deploy can't install it. | Use a newer release of the Action, such as Kubernetix-AI/deploy@v1, or remove kx-version. |
 | The kx 1.0.0 download doesn't match the checksum committed in Kubernetix-AI/deploy, so it wasn't installed. | Re-run the job. If it happens again, report it: https://github.com/Kubernetix-AI/deploy/security/advisories/new |
 | kx builds your app with Docker, and Docker isn't installed on this computer. | Use a runner with Docker, such as `ubuntu-latest`, or deploy a prebuilt `image`. |
+| registry.kubernetix.ai/acme-corp/shop-api:1.4.0 already holds another image, so kx left the tag alone and deployed nothing. | Tag a new version, or deploy what the tag holds with the `image` input and the digest the error names (`registry.kubernetix.ai/acme-corp/shop-api@sha256:...`). A re-run of a tag's workflow, or a second run for the same commit, usually ends here, because the rebuilt image has another digest. |
+| kx couldn't check whether registry.kubernetix.ai/acme-corp/shop-api:1.4.0 already exists, so nothing was deployed. | Re-run the job. |
+| The repository input needs kx 1.1.0 or later, and this job runs an older kx. | Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the repository input. |
+| The Action couldn't get this commit's tags from origin, so the image gets no version tag; to include them, set fetch-depth: 0 in actions/checkout. | Not an error: the deploy goes on with the commit's tag. Keep the checkout's credentials, set `fetch-depth: 0`, or deploy on tag pushes ([more](#image-tags-and-repository)). |
 
 ## Security
 
@@ -227,7 +286,9 @@ errors it adds what to change in the workflow.
 - **Pull requests never deploy**, so code that isn't merged can't reach production. Other
   events deploy, so list only the ones you deploy from.
 - **Only GitHub and Kubernetix** are contacted: GitHub for the kx download and the commit
-  status, `https://platform.kubernetix.ai` and `registry.kubernetix.ai` for the deploy.
+  status, your repository's `origin` for the commit's tags (with the checkout's own
+  credentials), and `https://platform.kubernetix.ai` and `registry.kubernetix.ai` for the
+  deploy.
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
