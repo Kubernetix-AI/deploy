@@ -46,7 +46,9 @@ if Kubernetix gives up on the version or the `timeout` passes. The version befor
 serving.
 
 The `concurrency` group serializes deploys of one app: a running deploy is never canceled, and
-if several pushes arrive while it runs, only the newest one deploys next. Run one deploy per
+if several pushes arrive while it runs, only the newest one deploys next. GitHub drops the other
+waiting runs, and a dropped tag push's image never gets its version tag: re-run that workflow, or
+give tag pushes a group of their own (`group: kubernetix-shop-api-${{ github.ref_type }}`). Run one deploy per
 app at a time; a deploy started elsewhere (from a laptop or the dashboard) at the same moment
 can race this one.
 
@@ -149,7 +151,8 @@ with a pre-release such as `-rc.1`; the highest if there are several), the image
 version too, without the `v`: `1.4.0`. The run log's Pushed line and the job summary show it.
 
 kx never moves a version tag. If `1.4.0` already holds an image from another commit (or one
-that doesn't say which commit it is), the job fails before building and deploys nothing. If it
+that doesn't say which commit it is), the job fails and deploys nothing (before building when kx
+could look first, otherwise right after pushing). If it
 holds an earlier build of the same commit (a re-run of the job, or a second run for one tagged
 push), the tag stays there, the log says "The version tag 1.4.0 stays on the earlier build of
 this commit.", and the new build deploys. Registry tags can be written by anyone who can push to
@@ -270,7 +273,7 @@ errors it adds what to change in the workflow.
 | kx 1.0.0 is no longer available from GitHub, so this release of Kubernetix-AI/deploy can't install it. | Use a newer release of the Action, such as Kubernetix-AI/deploy@v1, or remove kx-version. |
 | The kx 1.0.0 download doesn't match the checksum committed in Kubernetix-AI/deploy, so it wasn't installed. | Re-run the job. If it happens again, report it: https://github.com/Kubernetix-AI/deploy/security/advisories/new |
 | kx builds your app with Docker, and Docker isn't installed on this computer. | Use a runner with Docker, such as `ubuntu-latest`, or deploy a prebuilt `image`. |
-| registry.kubernetix.ai/acme-corp/shop-api:1.4.0 already holds another image, so kx left the tag alone and deployed nothing. | The tag names an image from another commit, or one pushed without kx's commit label (by hand or by kx 1.0). Tag a new version, or deploy what the tag holds with the `image` input and the digest the error names (`registry.kubernetix.ai/acme-corp/shop-api@sha256:...`). |
+| registry.kubernetix.ai/acme-corp/shop-api:1.4.0 already holds another image, so kx left the tag alone and deployed nothing. | The tag names an image from another commit, or one pushed without kx's commit label (by hand or by kx 1.0). Tag a new version, or, if you know the image the tag holds (anyone who can push to the organization's registry can write a tag), deploy it with the `image` input and the digest the error names (`registry.kubernetix.ai/acme-corp/shop-api@sha256:...`). |
 | kx couldn't check whether registry.kubernetix.ai/acme-corp/shop-api:1.4.0 already exists, so nothing was deployed. | Re-run the job. |
 | The repository input needs kx 1.1.0 or later, and this job runs an older kx. | Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the repository input. |
 | The Action couldn't get this commit's tags from origin, so the image gets no version tag; to include them, set fetch-depth: 0 in actions/checkout. | Not an error: the deploy goes on with the commit's tag. Keep the checkout's credentials, set `fetch-depth: 0`, or deploy on tag pushes ([more](#image-tags-and-repository)). |
