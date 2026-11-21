@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # version-tags.sh DIR: let kx see the version tags of the commit it builds.
 #
-# kx pushes the image under the commit's version too (1.4.0 for a tag
-# v1.4.0), but actions/checkout fetches one commit and no tags by default.
-# When the checkout holding DIR (the path input) has no version tag on
-# HEAD, this asks origin which tags point at HEAD and fetches the ones that
-# look like versions (v1.2.3 or 1.2.3, optionally with a pre-release such
-# as -rc.1; kx makes the final choice). It uses the checkout's own
+# kx gives the image the commit's version too (1.4.0 for a tag v1.4.0),
+# but actions/checkout fetches one commit and no tags by default. This asks
+# origin which tags point at the commit checked out in DIR (the path input)
+# and fetches the ones that look like versions (v1.2.3 or 1.2.3,
+# optionally with a pre-release such as -rc.1; kx makes the final choice)
+# that the checkout doesn't have yet. It uses the checkout's own
 # credentials and never fails the job: without an answer from origin, kx
-# pushes the image under the commit's tag only.
+# uses the version tags the checkout has, if any.
 #
 # Tag names come from the repository, so only names made of the characters
 # a version uses are ever passed to git, and each one as part of a single
@@ -34,14 +34,15 @@ remote() {
 head="$(git_in rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null)" || exit 0
 [ -n "$head" ] || exit 0
 
+have=" "
 while IFS= read -r t; do
   if [[ "$t" =~ $version_re ]]; then
-    exit 0 # the checkout already has one; kx reads it
+    have+="$t "
   fi
 done < <(git_in tag --list --points-at "$head" 2>/dev/null)
 
 if ! listing="$(remote ls-remote --tags origin 2>/dev/null)"; then
-  echo "$no_tags"
+  [ "$have" != " " ] || echo "$no_tags"
   exit 0
 fi
 
@@ -53,7 +54,7 @@ while IFS=$'\t' read -r sha ref; do
   name="${ref#refs/tags/}"
   name="${name%^\{\}}"
   [[ "$name" =~ $version_re ]] || continue
-  case " ${names[*]-} " in *" $name "*) continue ;; esac
+  case "$have ${names[*]-} " in *" $name "*) continue ;; esac
   names+=("$name")
 done <<<"$listing"
 
@@ -65,7 +66,7 @@ for name in "${names[@]+"${names[@]}"}"; do
 done
 if [ "${#fetched[@]}" -gt 0 ]; then
   echo "Fetched this commit's version tags from origin: ${fetched[*]}"
-elif [ "${#names[@]}" -gt 0 ]; then
+elif [ "${#names[@]}" -gt 0 ] && [ "$have" = " " ]; then
   echo "$no_tags"
 fi
 exit 0

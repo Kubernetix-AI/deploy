@@ -12,7 +12,6 @@
 #   DEPLOY_DOCKERFILE   dockerfile
 #   DEPLOY_IMAGE        image
 #   DEPLOY_REPOSITORY   repository
-#   DEPLOY_REBUILD      rebuild
 #   DEPLOY_ENVIRONMENT  environment
 #   DEPLOY_WAIT         wait
 #   DEPLOY_TIMEOUT      timeout
@@ -21,8 +20,8 @@
 # value can't turn into another flag or a second argument.
 #
 # Before kx builds, version-tags.sh fetches the commit's version tags from
-# origin when the checkout has none, so kx can push the image under the
-# version too.
+# origin that the checkout doesn't have, so kx can give the image the
+# version too (kx 1.1.0 and later; kx 1.0 has no version tags).
 set -euo pipefail
 
 escape() {
@@ -85,18 +84,24 @@ if [ -n "${DEPLOY_DOCKERFILE:-}" ]; then
   args+=("--dockerfile=$DEPLOY_DOCKERFILE")
 fi
 
-# needs_flag FLAG INPUT: stop unless this kx has FLAG. kx 1.0 has neither
-# --repository nor --rebuild; say so instead of kx's unknown-flag error.
+# kx_has FLAG: whether this kx's deploy command has FLAG (kx 1.0 has
+# neither --tag nor --repository).
 kx_help=""
-needs_flag() {
+kx_has() {
   if [ -z "$kx_help" ]; then
     kx_help="$("$KX_BIN" deploy --help 2>/dev/null || true)"
   fi
   case "$kx_help" in
-    *"$1"*) ;;
-    *) fail "The $2 input needs kx 1.1.0 or later, and this job runs an older kx." \
-      "Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the $2 input." ;;
+    *"$1"*) return 0 ;;
+    *) return 1 ;;
   esac
+}
+
+# needs_flag FLAG INPUT: stop unless this kx has FLAG; say so instead of
+# kx's unknown-flag error.
+needs_flag() {
+  kx_has "$1" || fail "The $2 input needs kx 1.1.0 or later, and this job runs an older kx." \
+    "Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the $2 input."
 }
 
 if [ -n "${DEPLOY_REPOSITORY:-}" ]; then
@@ -104,14 +109,6 @@ if [ -n "${DEPLOY_REPOSITORY:-}" ]; then
   args+=("--repository=$DEPLOY_REPOSITORY")
 fi
 
-case "${DEPLOY_REBUILD:-false}" in
-  false | False | FALSE) ;;
-  true | True | TRUE)
-    needs_flag --rebuild rebuild
-    args+=(--rebuild)
-    ;;
-  *) fail "The rebuild input must be true or false." "Set rebuild: true to build the image even if kx built this commit before, or leave it out." ;;
-esac
 
 args+=("--environment=${DEPLOY_ENVIRONMENT:-production}")
 
@@ -125,11 +122,12 @@ if [ -n "${DEPLOY_TIMEOUT:-}" ]; then
   args+=("--timeout=$DEPLOY_TIMEOUT")
 fi
 
-# kx skips pull request runs, and with an image it builds nothing.
+# kx skips pull request runs, with an image it builds nothing, and kx 1.0
+# gives no version tags.
 case "${GITHUB_EVENT_NAME:-}" in
   pull_request | pull_request_target | pull_request_review | pull_request_review_comment | merge_group | "") ;;
   *)
-    if [ -z "${DEPLOY_IMAGE:-}" ]; then
+    if [ -z "${DEPLOY_IMAGE:-}" ] && kx_has --tag; then
       bash "$(dirname "${BASH_SOURCE[0]}")/version-tags.sh" "$path" || true
     fi
     ;;

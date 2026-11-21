@@ -76,16 +76,23 @@ bash "$SCRIPT" "$CO" >/dev/null 2>&1
 check "fetches the version tags" test "$(tags_at_head "$CO")" = "v1.2.0 v1.3.0-rc.1 "
 check "doesn't make a full checkout shallow" test "$(g -C "$CO" rev-parse --is-shallow-repository)" = false
 
-echo "# a checkout that already has a version tag on HEAD"
+echo "# a checkout that already has one of the version tags"
 CO="$(checkout tagged --depth 1)"
-g -C "$CO" tag v1.2.0
+g -C "$CO" fetch -q --no-tags origin "+refs/tags/v1.2.0:refs/tags/v1.2.0"
+OUT="$(bash "$SCRIPT" "$CO" 2>&1)"
+RC=$?
+if [ "$RC" -eq 0 ] && [ "$(tags_at_head "$CO")" = "v1.2.0 v1.3.0-rc.1 " ] && [ "$OUT" = "Fetched this commit's version tags from origin: v1.3.0-rc.1" ]; then
+  pass "still fetches the versions only origin has"
+else
+  fail_test "still fetches the versions only origin has" "rc=$RC tags=$(tags_at_head "$CO") output: $OUT"
+fi
 g -C "$CO" remote set-url origin "file://$TMP_ROOT/no-such-repository"
 OUT="$(bash "$SCRIPT" "$CO" 2>&1)"
 RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
-  pass "asks origin nothing when HEAD already has a version tag"
+  pass "says nothing when origin can't be reached but the checkout has a version tag"
 else
-  fail_test "asks origin nothing when HEAD already has a version tag" "rc=$RC output: $OUT"
+  fail_test "says nothing when origin can't be reached but the checkout has a version tag" "rc=$RC output: $OUT"
 fi
 
 echo "# origin can't be reached"
@@ -134,6 +141,28 @@ CO="$(checkout subfolder --depth 1)"
 mkdir -p "$CO/services/api"
 bash "$SCRIPT" "$CO/services/api" >/dev/null 2>&1
 check "works from a subfolder" test "$(tags_at_head "$CO")" = "v1.2.0 v1.3.0-rc.1 "
+
+echo "# tag names on origin that aren't versions never reach git"
+SRC3="$TMP_ROOT/src3"
+g init -q "$SRC3"
+echo x >"$SRC3/x"
+g -C "$SRC3" add x
+g -C "$SRC3" commit -q -m x
+# shellcheck disable=SC2016 # the payloads are meant literally
+for hostile in 'v9.9.9-$(touch${IFS}pwned-dollar)' 'v9.9.8;touch${IFS}pwned-semi' 'v9.9.7-`touch${IFS}pwned-tick`' 'v9.9.6--upload-pack=touch${IFS}pwned-flag'; do
+  if g check-ref-format "refs/tags/$hostile"; then
+    g -C "$SRC3" tag "$hostile"
+  fi
+done
+g -C "$SRC3" tag v9.9.5
+HOSTILE="$TMP_ROOT/hostile"
+g clone -q --no-tags --depth 1 "file://$SRC3" "$HOSTILE"
+OUT="$(cd "$TMP_ROOT" && bash "$SCRIPT" "$HOSTILE" 2>&1)"
+if [ "$(tags_at_head "$HOSTILE")" = "v9.9.5 " ] && [ -z "$(find "$TMP_ROOT" -name 'pwned*' -print)" ] && [ "$(g -C "$SRC3" tag | wc -l)" -ge 3 ]; then
+  pass "only the real version is fetched, and nothing runs"
+else
+  fail_test "only the real version is fetched, and nothing runs" "tags: $(tags_at_head "$HOSTILE")" "origin tags: $(g -C "$SRC3" tag | tr '\n' ' ')" "output: $OUT" "pwned: $(find "$TMP_ROOT" -name 'pwned*' -print)"
+fi
 
 echo "# HEAD is the commit origin's tags point at"
 check "the fetched tags point at HEAD" test "$(g -C "$CO" rev-parse 'v1.3.0-rc.1^{commit}')" = "$HEAD_SHA"

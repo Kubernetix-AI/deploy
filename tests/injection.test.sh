@@ -18,10 +18,10 @@ cat >"$STUB" <<'EOF'
 #!/usr/bin/env bash
 # Stand-in kx: records its arguments (NUL-separated), the tokens it got and
 # the tags of the commit it would build. "deploy --help" prints STUB_HELP
-# (by default a line with the --repository flag, as kx 1.1 has).
+# (by default the --tag and --repository lines, as kx 1.1 has).
 if [ "${1-}" = deploy ] && [ "${2-}" = --help ]; then
-  printf '%s\n' "${STUB_HELP-      --repository repository   the registry repository to push to
-      --rebuild                 build the image even if kx built this commit the same way before}"
+  printf '%s\n' "${STUB_HELP-      --tag tag                 also push the image under this tag
+      --repository repository   the registry repository to push to}"
   exit 0
 fi
 printf '%s\0' "$@" >"$STUB_ARGS"
@@ -132,28 +132,12 @@ else
   fail_test "with a kx that has no --repository, the repository input stops with the two-line fix before deploying" "rc=$RC output: $OUT"
 fi
 
-echo "# the rebuild input"
-run_deploy '{"token": "kx_test", "rebuild": "true"}'
-expect_args "rebuild: true adds --rebuild" \
-  deploy --github "--build=." "--rebuild" "--environment=production" "--timeout=18m"
-
-run_deploy '{"token": "kx_test", "rebuild": "false", "repository": "shop-frontend"}'
-expect_args "rebuild: false adds nothing" \
-  deploy --github "--build=." "--repository=shop-frontend" "--environment=production" "--timeout=18m"
-
-run_deploy "$(json --arg r "true\$(touch pwned-rebuild)" '{token: "kx_test", rebuild: $r}')"
-if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The rebuild input must be true or false."; then
-  pass "a rebuild value other than true or false is refused before kx runs"
+echo "# inputs this release doesn't have"
+OUT="$(python3 "$REPO_ROOT/tests/run_step.py" deploy '{"rebuild": "true"}' "{\"install.kx-path\": \"$STUB\"}" 2>&1)"
+if [ $? -eq 97 ] && contains "$OUT" "no input named rebuild"; then
+  pass "there is no rebuild input: kx always builds what is checked out"
 else
-  fail_test "a rebuild value other than true or false is refused before kx runs" "rc=$RC output: $OUT"
-fi
-expect_nothing_ran "no input was executed (rebuild)"
-
-run_deploy '{"token": "kx_test", "rebuild": "true"}' STUB_HELP="      --repository repository   the registry repository to push to"
-if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The rebuild input needs kx 1.1.0 or later"; then
-  pass "with a kx that has no --rebuild, rebuild: true stops with the two-line fix before deploying"
-else
-  fail_test "with a kx that has no --rebuild, rebuild: true stops with the two-line fix before deploying" "rc=$RC output: $OUT"
+  fail_test "there is no rebuild input: kx always builds what is checked out" "output: $OUT"
 fi
 
 echo "# image mode"
@@ -241,6 +225,13 @@ if [ "$RC" -eq 0 ] && [ -z "$(cat "$TMP_ROOT/tags")" ]; then
   pass "image mode builds nothing, so it fetches no tags"
 else
   fail_test "image mode builds nothing, so it fetches no tags" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null)"
+fi
+
+RUN_IN="$CHECKOUT" run_deploy '{"token": "kx_test"}' STUB_HELP="      --app app   the app"
+if [ "$RC" -eq 0 ] && [ -z "$(cat "$TMP_ROOT/tags")" ]; then
+  pass "a kx without version tags (1.0) gets no tags fetched for it"
+else
+  fail_test "a kx without version tags (1.0) gets no tags fetched for it" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null) output: $OUT"
 fi
 
 RUN_IN="$CHECKOUT" run_deploy '{"token": ""}' GITHUB_EVENT_NAME=pull_request
