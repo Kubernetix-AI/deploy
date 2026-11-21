@@ -16,8 +16,16 @@ mkdir -p "$WS" "$TMP_ROOT/stub"
 STUB="$TMP_ROOT/stub/kx"
 cat >"$STUB" <<'EOF'
 #!/usr/bin/env bash
-# Stand-in kx: records its arguments (NUL-separated) and the tokens it got.
+# Stand-in kx: records its arguments (NUL-separated), the tokens it got and
+# the tags of the commit it would build. "deploy --help" prints STUB_HELP
+# (by default the --tag and --repository lines, as kx 1.1 has).
+if [ "${1-}" = deploy ] && [ "${2-}" = --help ]; then
+  printf '%s\n' "${STUB_HELP-      --tag tag                 also push the image under this tag
+      --repository repository   the registry repository to push to}"
+  exit 0
+fi
 printf '%s\0' "$@" >"$STUB_ARGS"
+git tag --points-at HEAD 2>/dev/null | sort | tr '\n' ' ' >"$STUB_TAGS"
 printf '%s' "${KX_TOKEN-<unset>}" >"$STUB_TOKEN"
 printf '%s' "${GITHUB_TOKEN-<unset>}" >"$STUB_GHTOKEN"
 echo "url=https://shop-api.example.test" >>"$GITHUB_OUTPUT"
@@ -36,17 +44,19 @@ P_SEMI='prod;touch pwned-semi&&touch pwned-and|touch pwned-pipe'
 P_TOKEN='kx_$(touch pwned-token)`touch pwned-token2`'
 P_GHTOKEN='ghs_$(touch pwned-ghtoken)'
 P_IMAGE='registry.example/app@sha256:`touch pwned-image`$(touch pwned-image2)'
+P_REPO='web/$(touch pwned-repo)`touch pwned-repo2`'
 
 # run_deploy INPUTS_JSON [NAME=VALUE]...: run the Deploy step in $WS.
 # Sets RC, OUT and ARGS (the stub's arguments; empty if it didn't run).
 run_deploy() {
   local inputs="$1"
   shift
-  rm -f "$TMP_ROOT/args" "$TMP_ROOT/token" "$TMP_ROOT/ghtoken"
+  rm -f "$TMP_ROOT/args" "$TMP_ROOT/token" "$TMP_ROOT/ghtoken" "$TMP_ROOT/tags"
   : >"$TMP_ROOT/output"
-  OUT="$(cd "$WS" && env -i HOME="$HOME" PATH="$PATH" GITHUB_EVENT_NAME=push \
+  OUT="$(cd "${RUN_IN:-$WS}" && env -i HOME="$HOME" PATH="$PATH" GITHUB_EVENT_NAME=push \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
     GITHUB_OUTPUT="$TMP_ROOT/output" STUB_ARGS="$TMP_ROOT/args" STUB_TOKEN="$TMP_ROOT/token" \
-    STUB_GHTOKEN="$TMP_ROOT/ghtoken" "$@" \
+    STUB_GHTOKEN="$TMP_ROOT/ghtoken" STUB_TAGS="$TMP_ROOT/tags" "$@" \
     python3 "$REPO_ROOT/tests/run_step.py" deploy "$inputs" "{\"install.kx-path\": \"$STUB\"}" 2>&1)"
   RC=$?
   ARGS=()
@@ -101,6 +111,34 @@ else
 fi
 if ! contains "$(printf '%s ' "${ARGS[@]}")" "kx_"; then pass "the token is never a command-line argument"; else fail_test "the token is never a command-line argument"; fi
 if contains "$OUT" "::add-mask::$P_TOKEN"; then pass "the token is masked in the log"; else fail_test "the token is masked in the log" "output: $OUT"; fi
+
+echo "# the repository input"
+inputs="$(json --arg repo "$P_REPO" '{repository: $repo, token: "kx_test"}')"
+run_deploy "$inputs"
+expect_args "repository reaches kx as one literal --repository=value argument" \
+  deploy --github "--build=." "--repository=$P_REPO" "--environment=production" "--timeout=18m"
+expect_nothing_ran "no input was executed (repository)"
+
+inputs="$(json --arg img "$P_IMAGE" '{image: $img, repository: "shop-frontend", token: "kx_test"}')"
+run_deploy "$inputs"
+expect_args "image mode with a repository passes both, for kx to explain" \
+  deploy --github "--image=$P_IMAGE" "--repository=shop-frontend" "--environment=production" "--timeout=18m"
+
+run_deploy '{"token": "kx_test", "repository": "shop-frontend"}' STUB_HELP="      --app app   the app"
+if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "The repository input needs kx 1.1.0 or later" &&
+  contains "$OUT" "%0A"; then
+  pass "with a kx that has no --repository, the repository input stops with the two-line fix before deploying"
+else
+  fail_test "with a kx that has no --repository, the repository input stops with the two-line fix before deploying" "rc=$RC output: $OUT"
+fi
+
+echo "# inputs this release doesn't have"
+OUT="$(python3 "$REPO_ROOT/tests/run_step.py" deploy '{"rebuild": "true"}' "{\"install.kx-path\": \"$STUB\"}" 2>&1)"
+if [ $? -eq 97 ] && contains "$OUT" "no input named rebuild"; then
+  pass "there is no rebuild input: kx always builds what is checked out"
+else
+  fail_test "there is no rebuild input: kx always builds what is checked out" "output: $OUT"
+fi
 
 echo "# image mode"
 inputs="$(json --arg img "$P_IMAGE" --arg env "$P_SEMI" '{image: $img, environment: $env, token: "kx_test"}')"
@@ -161,6 +199,46 @@ if [ "$RC" -ne 0 ] && [ "${#ARGS[@]}" -eq 0 ] && contains "$OUT" "more than one 
   pass "a token with a line break is refused without printing it"
 else
   fail_test "a token with a line break is refused without printing it" "rc=$RC output: $OUT"
+fi
+
+echo "# the commit's version tags"
+g() { git -c init.defaultBranch=main -c commit.gpgsign=false -c tag.gpgsign=false -c user.name=t -c user.email=t@example.test "$@"; }
+ORIGIN="$TMP_ROOT/origin"
+g init -q "$ORIGIN"
+echo x >"$ORIGIN/x"
+g -C "$ORIGIN" add x
+g -C "$ORIGIN" commit -q -m x
+g -C "$ORIGIN" tag v2.0.0
+CHECKOUT="$TMP_ROOT/checkout"
+g clone -q --no-tags --depth 1 "file://$ORIGIN" "$CHECKOUT"
+
+RUN_IN="$CHECKOUT" run_deploy '{"token": "kx_test"}'
+if [ "$RC" -eq 0 ] && [ "$(cat "$TMP_ROOT/tags")" = "v2.0.0 " ] && contains "$OUT" "Fetched this commit's version tags from origin: v2.0.0"; then
+  pass "a checkout without tags gets the commit's version tags from origin before kx builds"
+else
+  fail_test "a checkout without tags gets the commit's version tags from origin before kx builds" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null) output: $OUT"
+fi
+
+g -C "$CHECKOUT" tag -d v2.0.0 >/dev/null
+RUN_IN="$CHECKOUT" run_deploy "$(json --arg img "$P_IMAGE" '{image: $img, token: "kx_test"}')"
+if [ "$RC" -eq 0 ] && [ -z "$(cat "$TMP_ROOT/tags")" ]; then
+  pass "image mode builds nothing, so it fetches no tags"
+else
+  fail_test "image mode builds nothing, so it fetches no tags" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null)"
+fi
+
+RUN_IN="$CHECKOUT" run_deploy '{"token": "kx_test"}' STUB_HELP="      --app app   the app"
+if [ "$RC" -eq 0 ] && [ -z "$(cat "$TMP_ROOT/tags")" ]; then
+  pass "a kx without version tags (1.0) gets no tags fetched for it"
+else
+  fail_test "a kx without version tags (1.0) gets no tags fetched for it" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null) output: $OUT"
+fi
+
+RUN_IN="$CHECKOUT" run_deploy '{"token": ""}' GITHUB_EVENT_NAME=pull_request
+if [ "$RC" -eq 0 ] && [ -z "$(cat "$TMP_ROOT/tags")" ]; then
+  pass "pull request runs, which kx skips, fetch no tags"
+else
+  fail_test "pull request runs, which kx skips, fetch no tags" "rc=$RC tags=$(cat "$TMP_ROOT/tags" 2>/dev/null)"
 fi
 
 echo "# kx's result"

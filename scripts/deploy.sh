@@ -11,12 +11,17 @@
 #   DEPLOY_PATH         path
 #   DEPLOY_DOCKERFILE   dockerfile
 #   DEPLOY_IMAGE        image
+#   DEPLOY_REPOSITORY   repository
 #   DEPLOY_ENVIRONMENT  environment
 #   DEPLOY_WAIT         wait
 #   DEPLOY_TIMEOUT      timeout
 #
 # Each value becomes exactly one argument of the form --flag=value, so a
 # value can't turn into another flag or a second argument.
+#
+# Before kx builds, version-tags.sh fetches the commit's version tags from
+# origin that the checkout doesn't have, so kx can give the image the
+# version too (kx 1.1.0 and later; kx 1.0 has no version tags).
 set -euo pipefail
 
 escape() {
@@ -79,6 +84,32 @@ if [ -n "${DEPLOY_DOCKERFILE:-}" ]; then
   args+=("--dockerfile=$DEPLOY_DOCKERFILE")
 fi
 
+# kx_has FLAG: whether this kx's deploy command has FLAG (kx 1.0 has
+# neither --tag nor --repository).
+kx_help=""
+kx_has() {
+  if [ -z "$kx_help" ]; then
+    kx_help="$("$KX_BIN" deploy --help 2>/dev/null || true)"
+  fi
+  case "$kx_help" in
+    *"$1"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# needs_flag FLAG INPUT: stop unless this kx has FLAG; say so instead of
+# kx's unknown-flag error.
+needs_flag() {
+  kx_has "$1" || fail "The $2 input needs kx 1.1.0 or later, and this job runs an older kx." \
+    "Use a release of Kubernetix-AI/deploy that pins kx 1.1.0 or later (or set kx-version to one), or remove the $2 input."
+}
+
+if [ -n "${DEPLOY_REPOSITORY:-}" ]; then
+  needs_flag --repository repository
+  args+=("--repository=$DEPLOY_REPOSITORY")
+fi
+
+
 args+=("--environment=${DEPLOY_ENVIRONMENT:-production}")
 
 case "${DEPLOY_WAIT:-true}" in
@@ -90,5 +121,16 @@ esac
 if [ -n "${DEPLOY_TIMEOUT:-}" ]; then
   args+=("--timeout=$DEPLOY_TIMEOUT")
 fi
+
+# kx skips pull request runs, with an image it builds nothing, and kx 1.0
+# gives no version tags.
+case "${GITHUB_EVENT_NAME:-}" in
+  pull_request | pull_request_target | pull_request_review | pull_request_review_comment | merge_group | "") ;;
+  *)
+    if [ -z "${DEPLOY_IMAGE:-}" ] && kx_has --tag; then
+      bash "$(dirname "${BASH_SOURCE[0]}")/version-tags.sh" "$path" || true
+    fi
+    ;;
+esac
 
 exec "$KX_BIN" "${args[@]}"
