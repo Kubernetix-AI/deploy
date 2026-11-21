@@ -33,6 +33,10 @@ requirement):
 Do this after the kx release is published and verified (see the kx repository's
 `docs/RELEASING.md`).
 
+The README describes the `repository` input and version tags, which need kx 1.1.0. Release the
+`main` that has them only together with a pin of kx 1.1.0 or later, so that `@v1` users never
+read about features their kx doesn't have.
+
 1. Start from a clean, up-to-date `main` in a clone of this repository, as a repository admin
    (the push goes straight to `main`, which only admins may do) with two-factor authentication
    and `gh` signed in (it verifies the kx attestations):
