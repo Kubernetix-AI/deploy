@@ -11,11 +11,14 @@ environment links to the live app.
 
 ## Quick start
 
-1. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
+1. **Create the app first.** Run `kx deploy` once from your computer (it offers to create the
+   app), or create it in the Kubernetix dashboard. In CI, kx deploys to an app that already
+   exists.
+2. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
    **Deploy from GitHub** → **Create deploy token**, and copy it.
-2. **Save it in a `production` environment** limited to your main branch
+3. **Save it in a `production` environment** limited to your main branch
    ([how](#set-up-the-production-environment)), as the secret `KX_TOKEN`.
-3. **Add the workflow** below as `.github/workflows/kubernetix.yml` on your main branch, with
+4. **Add the workflow** below as `.github/workflows/kubernetix.yml` on your main branch, with
    your app's name in both places, and push.
 
 ```yaml
@@ -29,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: { name: production, url: "${{ steps.kx.outputs.url }}" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: kx
         uses: Kubernetix-AI/deploy@v1
         with: { app: shop-api, token: "${{ secrets.KX_TOKEN }}" }
