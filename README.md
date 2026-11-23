@@ -11,11 +11,17 @@ environment links to the live app.
 
 ## Quick start
 
-1. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
+1. **Create the app first.** Run `kx deploy` once from your computer (it offers to create the
+   app), or create it in the Kubernetix dashboard. With the `app:` input, the Action deploys to
+   an app that already exists. To let the first run create the app instead, run
+   `kx link <name>` once, commit the `.kx.json` it writes, and leave out the `app:` input; that
+   run needs a token that can deploy every app (Settings → API tokens) instead of the deploy
+   token below, which only reaches the app it was made for.
+2. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
    **Deploy from GitHub** → **Create deploy token**, and copy it.
-2. **Save it in a `production` environment** limited to your main branch
+3. **Save it in a `production` environment** limited to your main branch
    ([how](#set-up-the-production-environment)), as the secret `KX_TOKEN`.
-3. **Add the workflow** below as `.github/workflows/kubernetix.yml` on your main branch, with
+4. **Add the workflow** below as `.github/workflows/kubernetix.yml` on your main branch, with
    your app's name in both places, and push.
 
 ```yaml
@@ -29,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: { name: production, url: "${{ steps.kx.outputs.url }}" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: kx
         uses: Kubernetix-AI/deploy@v1
         with: { app: shop-api, token: "${{ secrets.KX_TOKEN }}" }
@@ -89,7 +95,7 @@ dashboard.
 | `wait` | `true` waits until the deploy is live; `false` stops once it has started. | `true` |
 | `timeout` | How long to wait for the deploy to go live. The default outlasts Kubernetix's own retries of a version that doesn't get ready (3 attempts of 5 minutes). | `18m` |
 | `github-token` | The token used to set the commit status. It needs `statuses: write`. | `${{ github.token }}` |
-| `kx-version` | The kx version to run. Each release of this Action pins one and carries its checksums; only those versions can be used. | `1.0.0-rc.1` <!-- pinned-kx-version --> |
+| `kx-version` | The kx version to run. Each release of this Action pins one and carries its checksums; only those versions can be used. | `1.0.0` <!-- pinned-kx-version --> |
 
 ## Outputs
 
