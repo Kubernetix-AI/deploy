@@ -25,6 +25,10 @@ inputs:
     description: Deploy this image instead of building one, for example registry.kubernetix.ai/acme-corp/shop-api@sha256:... Don't combine it with path or dockerfile.
     required: false
     default: ""
+  repository:
+    description: The repository in your organization's registry to push the image to, registry.kubernetix.ai/<org>/<repository>, for example shop-frontend. By default, the repository in .kx.json, or the app's name. Needs kx 1.1.0 or later.
+    required: false
+    default: ""
   environment:
     description: The name in the commit status ("Kubernetix / production"). Use the name of the job's environment.
     required: false
@@ -84,6 +88,7 @@ runs:
         DEPLOY_PATH: ${{ inputs.path }}
         DEPLOY_DOCKERFILE: ${{ inputs.dockerfile }}
         DEPLOY_IMAGE: ${{ inputs.image }}
+        DEPLOY_REPOSITORY: ${{ inputs.repository }}
         DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
         DEPLOY_WAIT: ${{ inputs.wait }}
         DEPLOY_TIMEOUT: ${{ inputs.timeout }}
