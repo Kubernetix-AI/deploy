@@ -92,7 +92,7 @@ dashboard.
 | `wait` | `true` waits until the deploy is live; `false` stops once it has started. | `true` |
 | `timeout` | How long to wait for the deploy to go live. The default outlasts Kubernetix's own retries of a version that doesn't get ready (3 attempts of 5 minutes). | `18m` |
 | `github-token` | The token used to set the commit status. It needs `statuses: write`. | `${{ github.token }}` |
-| `kx-version` | The kx version to run. Each release of this Action pins one and carries its checksums; only those versions can be used. | `1.0.0-rc.1` <!-- pinned-kx-version --> |
+| `kx-version` | The kx version to run. Each release of this Action pins one and carries its checksums; only those versions can be used. | `1.0.0` <!-- pinned-kx-version --> |
 
 ## Outputs
 

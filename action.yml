@@ -44,7 +44,7 @@ inputs:
   kx-version:
     description: The kx version to run. Each release of this Action pins one and carries its checksums; only versions with checksums in this release can be used.
     required: false
-    default: "1.0.0-rc.1" # pinned kx version: written by scripts/publish-action.sh
+    default: "1.0.0" # pinned kx version: written by scripts/publish-action.sh
 
 outputs:
   url:
