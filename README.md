@@ -184,7 +184,7 @@ tag. Either of these also works:
 - or fetch the tags in the checkout yourself:
 
   ```yaml
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v7
           with: { fetch-depth: 0 }   # or: fetch-tags: true
   ```
 
@@ -195,7 +195,8 @@ The image goes to `registry.kubernetix.ai/<org>/<app>` unless the `repository` i
 `"repository"` in a committed `.kx.json` (for the app it links), names another repository in
 your organization's registry, such as the one your images have always been in. The name is
 lowercase letters and digits with single `.`, `_` or `-` between them and `/` between parts,
-without the registry's address or the organization. A deploy token's Push images permission
+without the registry's address or the organization, and with no part called `tags` (Kubernetix's
+image routes would read it as a tag). A deploy token's Push images permission
 covers every repository in the organization's registry, so the app's own deploy token can push
 there.
 
