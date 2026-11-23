@@ -16,8 +16,10 @@ environment links to the live app.
    an app that already exists. To let the first run create the app instead, run
    `kx link <name>` once, commit the `.kx.json` it writes, and leave out the `app:` input; that
    run needs a token that can deploy every app (Settings → API tokens) instead of the deploy
-   token below, which only reaches the app it was made for. If you later delete the app, the next
-   CI run creates it again; remove `.kx.json` (or the workflow) first.
+   token below, which only reaches the app it was made for. If you later delete the app, the
+   next run creates it again. To stop that, remove `.kx.json` (or the workflow), or, once the
+   app exists, run `kx link <name>` again and commit the `.kx.json` it writes, which then
+   includes the app's ID.
 2. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
    **Deploy from GitHub** → **Create deploy token**, and copy it.
 3. **Save it in a `production` environment** limited to your main branch

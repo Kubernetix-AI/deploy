@@ -14,8 +14,9 @@ These need kx 1.1.0 or later; the release that adds them pins it.
 - Docs: version tags (how the checkout gets them, what happens on a re-run or a second run
   for the same commit, that a tag someone else took can only stop a deploy), the
   `repository` input, and that the `concurrency` group can drop a waiting tag push's run.
-- Docs: with a committed `.kx.json`, deleting the app means the next run creates it again, so
-  remove `.kx.json` (or the workflow) first. kx 1.1.0 says in the log when a run creates the
+- Docs: with a committed `.kx.json` that has no app ID, deleting the app means the next run
+  creates it again; to stop that, remove `.kx.json` (or the workflow), or commit the `.kx.json`
+  that `kx link` writes once the app exists. kx 1.1.0 says in the log when a run creates the
   app this way.
 
 ## 1.0.0
