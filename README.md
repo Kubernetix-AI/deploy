@@ -12,8 +12,11 @@ environment links to the live app.
 ## Quick start
 
 1. **Create the app first.** Run `kx deploy` once from your computer (it offers to create the
-   app), or create it in the Kubernetix dashboard. In CI, kx deploys to an app that already
-   exists.
+   app), or create it in the Kubernetix dashboard. With the `app:` input, the Action deploys to
+   an app that already exists. To let the first run create the app instead, run
+   `kx link <name>` once, commit the `.kx.json` it writes, and leave out the `app:` input; that
+   run needs a token that can deploy every app (Settings → API tokens) instead of the deploy
+   token below, which only reaches the app it was made for.
 2. **Create a deploy token.** In the Kubernetix dashboard, open your app → **Deploy** →
    **Deploy from GitHub** → **Create deploy token**, and copy it.
 3. **Save it in a `production` environment** limited to your main branch
